@@ -25,13 +25,12 @@ INSTALL sqlite; LOAD sqlite;
 ATTACH '/litefs/db.sqlite' (TYPE SQLITE); USE db;
 --- Create a distributed table
 CREATE TABLE IF NOT EXISTS db.persons (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        company TEXT NOT NULL
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    company TEXT NOT NULL
 );
-```
-```sql
+--- Insert some data (or use the web demo)
 WITH next_id AS (
     SELECT COALESCE(MAX(id), 0) + 1 AS id FROM db.persons
 )
