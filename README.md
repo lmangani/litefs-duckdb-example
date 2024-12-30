@@ -12,6 +12,6 @@ local docker-compose (not from the location of the README files above).**
 
 
 ### DuckDB
-This example is modified to use DuckDB instead of SQlite by leveraging the DuckDB sqlite extension with read/write capabilities.
+This example is modified to use DuckDB instead of SQlite by leveraging the DuckDB sqlite extension and file format supporting read/write capabilities on the primary node and read-only on replicas.
 
 ![LiteFS-Example-ezgif com-optimize](https://github.com/user-attachments/assets/ae5ba93c-d784-4292-a1ab-11e9098e577e)
