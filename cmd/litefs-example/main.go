@@ -19,7 +19,7 @@ import (
 
 // Command line flags.
 var (
-    dsn  = flag.String("dsn", "", "datasource name")
+    dsn  = flag.String("dsn", "memory", "datasource name")
     addr = flag.String("addr", ":8080", "bind address")
 )
 
@@ -47,18 +47,53 @@ func run(ctx context.Context) (err error) {
         return fmt.Errorf("bind address required")
     }
 
-    // Connect to DuckDB database.
-    db, err = sql.Open("duckdb", *dsn)
+    // Connect to DuckDB database with memory storage.
+    // db, err = sql.Open("duckdb", *dsn)
+    db, err = sql.Open("duckdb", "")
     if err != nil {
         return fmt.Errorf("open db: %w", err)
     }
     defer db.Close()
 
-    log.Printf("database opened at %s", *dsn)
+    // Ensure the database is reachable.
+    if err := db.Ping(); err != nil {
+        return fmt.Errorf("ping db: %w", err)
+    }
 
-    // Run migration.
-    if _, err := db.Exec(schemaSQL); err != nil {
+    log.Printf("database opened with memory storage")
+
+    // Create a connection from the database pool.
+    conn, err := db.Conn(ctx)
+    if err != nil {
+        return fmt.Errorf("get db connection: %w", err)
+    }
+    defer conn.Close()
+
+    // Log the current access mode.
+    setting := conn.QueryRowContext(ctx, "SELECT current_setting('access_mode')")
+    var accessMode string
+    if err := setting.Scan(&accessMode); err != nil {
+        return fmt.Errorf("get access mode: %w", err)
+    }
+    log.Printf("DB opened with access mode %s", accessMode)
+
+    // Install and load the SQLite extension.
+    if _, err := conn.ExecContext(ctx, "INSTALL sqlite; LOAD sqlite;"); err != nil {
+        return fmt.Errorf("cannot install/load sqlite extension: %w", err)
+    } else {
+        log.Printf("INSTALL OK")
+    }
+
+    if _, err := conn.ExecContext(ctx, "ATTACH '/litefs/db.sqlite' (TYPE SQLITE); USE db;"); err != nil {
+        return fmt.Errorf("cannot install/load sqlite extension: %w", err)
+    } else {
+        log.Printf("ATTACH OK")
+    }
+
+    if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
         return fmt.Errorf("cannot migrate schema: %w", err)
+    } else {
+        log.Printf("CREATE SQL OK")
     }
 
     // Start HTTP server.
@@ -84,7 +119,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
     // Query for the most recently added people.
     rows, err := db.Query(`
         SELECT id, name, phone, company
-        FROM persons
+        FROM db.persons
         ORDER BY id DESC
         LIMIT 10
     `)
@@ -137,20 +172,13 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    /*
-        // If this node is not primary, look up and redirect to the current primary.
-        primaryFilename := filepath.Join(filepath.Dir(*dsn), ".primary")
-        primary, err := os.ReadFile(primaryFilename)
-        if err != nil && !os.IsNotExist(err) {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
-        if string(primary) != "" {
-            log.Printf("redirecting to primary instance: %q", string(primary))
-            w.Header().Set("fly-replay", "instance="+string(primary))
-            return
-        }
-    */
+    var nextID int
+    err := db.QueryRowContext(r.Context(), "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM db.persons").Scan(&nextID)
+    if err != nil {
+        fmt.Fprintf(w, "ERROR: %s\n\n", err)
+        http.Error(w, "Failed to calculate next ID", http.StatusInternalServerError)
+        return
+    }
 
     // If this is the primary, attempt to write a record to the database.
     person := Person{
@@ -158,7 +186,9 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
         Phone:   gofakeit.Phone(),
         Company: gofakeit.Company(),
     }
-    if _, err := db.ExecContext(r.Context(), `INSERT INTO persons (name, phone, company) VALUES (?, ?, ?)`, person.Name, person.Phone, person.Company); err != nil {
+
+    if _, err := db.ExecContext(r.Context(), `INSERT INTO db.persons (id, name, phone, company) VALUES (?, ?, ?, ?)`, nextID, person.Name, person.Phone, person.Company); err != nil {
+        fmt.Fprintf(w, "ERROR: %s\n\n", err)
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
     }

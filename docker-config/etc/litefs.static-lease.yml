@@ -32,4 +32,4 @@ lease:
   candidate: $IS_PRIMARY
 
 exec:
-  - cmd: "litefs-example -addr :8081 -dsn /litefs/db"
+  - cmd: "litefs-example -addr :8081 -dsn /litefs/db.sqlite"

@@ -12,6 +12,8 @@ services:
         - "LITEFS_CONFIG=litefs.static-lease.yml"
     ports:
     - "8081:8081"
+    volumes:
+    - "./node1:/var/lib/litefs"
     privileged: true
     environment:
       FLY_REGION: primary
@@ -23,6 +25,8 @@ services:
         - "LITEFS_CONFIG=litefs.static-lease.yml"
     ports:
     - "8082:8081"
+    volumes:
+    - "./node2:/var/lib/litefs"
     privileged: true
     environment:
       FLY_REGION: replica1
